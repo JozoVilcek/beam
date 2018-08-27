@@ -167,4 +167,11 @@ public interface FlinkPipelineOptions
   Boolean isShutdownSourcesOnFinalWatermark();
 
   void setShutdownSourcesOnFinalWatermark(Boolean shutdownOnFinalWatermark);
+
+  @Description(
+      "Interval in milliseconds for sending latency tracking marks from the sources to the sinks.")
+  @Default.Long(-1L)
+  Long getLatencyTrackingInterval();
+
+  void setLatencyTrackingInterval(Long interval);
 }
