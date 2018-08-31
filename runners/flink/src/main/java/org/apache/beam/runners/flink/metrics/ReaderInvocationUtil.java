@@ -52,7 +52,7 @@ public class ReaderInvocationUtil<OutputT, ReaderT extends Source.Reader<OutputT
       try (Closeable ignored =
                MetricsEnvironment.scopedMetricsContainer(container.getMetricsContainer(stepName))) {
         boolean result = reader.start();
-        container.updateMetrics();
+        container.updateMetrics(stepName);
         return result;
       }
     } else {
@@ -65,7 +65,7 @@ public class ReaderInvocationUtil<OutputT, ReaderT extends Source.Reader<OutputT
       try (Closeable ignored =
                MetricsEnvironment.scopedMetricsContainer(container.getMetricsContainer(stepName))) {
         boolean result = reader.advance();
-        container.updateMetrics();
+        container.updateMetrics(stepName);
         return result;
       }
     } else {

@@ -83,11 +83,11 @@ public class FlinkMetricContainer {
         : null;
   }
 
-  void updateMetrics() {
+  void updateMetrics(String stepName) {
     MetricResults metricResults =
         asAttemptedOnlyMetricResults(metricsAccumulator.getLocalValue());
     MetricQueryResults metricQueryResults =
-        metricResults.queryMetrics(MetricsFilter.builder().build());
+        metricResults.queryMetrics(MetricsFilter.builder().addStep(stepName).build());
     updateCounters(metricQueryResults.getCounters());
     updateDistributions(metricQueryResults.getDistributions());
     updateGauge(metricQueryResults.getGauges());
