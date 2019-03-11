@@ -22,6 +22,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import javax.annotation.Nullable;
 import org.apache.beam.model.fnexecution.v1.BeamFnApi.MonitoringInfo;
@@ -90,23 +91,19 @@ public class MetricsContainerStepMap implements Serializable {
   }
 
   @Override
-  public boolean equals(Object o) {
-    if (this == o) {
-      return true;
-    }
-    if (o == null || getClass() != o.getClass()) {
-      return false;
+  public boolean equals(Object object) {
+    if (object instanceof MetricsContainerStepMap) {
+      MetricsContainerStepMap metricsContainerStepMap = (MetricsContainerStepMap) object;
+      return Objects.equals(metricsContainers, metricsContainerStepMap.metricsContainers)
+          && Objects.equals(unboundContainer, metricsContainerStepMap.unboundContainer);
     }
 
-    MetricsContainerStepMap that = (MetricsContainerStepMap) o;
-
-    // TODO(BEAM-6546): The underlying MetricContainerImpls do not implement equals().
-    return getMetricsContainers().equals(that.getMetricsContainers());
+    return false;
   }
 
   @Override
   public int hashCode() {
-    return metricsContainers.hashCode();
+    return Objects.hash(metricsContainers, unboundContainer);
   }
 
   /**
