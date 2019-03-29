@@ -235,4 +235,11 @@ public interface FlinkPipelineOptions
   Boolean getAllowNonRestoredState();
 
   void setAllowNonRestoredState(Boolean allowNonRestoredState);
+
+  @Description(
+      "Flag indicating whether auto-balance sharding for FileIO should be enabled.")
+  @Default.Boolean(false)
+  Boolean isAutoBalancedShardingEnabled();
+
+  void setAutoBalancedShardingEnabled(Boolean autoBalancedShardingEnabled);
 }

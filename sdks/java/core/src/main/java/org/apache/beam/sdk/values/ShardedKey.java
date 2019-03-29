@@ -25,14 +25,20 @@ public class ShardedKey<K> implements Serializable {
   private static final long serialVersionUID = 1L;
   private final K key;
   private final int shardNumber;
+  private final int salt;
 
   public static <K> ShardedKey<K> of(K key, int shardNumber) {
-    return new ShardedKey<>(key, shardNumber);
+    return of(key, shardNumber, 0);
   }
 
-  private ShardedKey(K key, int shardNumber) {
+  public static <K> ShardedKey<K> of(K key, int shardNumber, int salt) {
+    return new ShardedKey<>(key, shardNumber, salt);
+  }
+
+  private ShardedKey(K key, int shardNumber, int salt) {
     this.key = key;
     this.shardNumber = shardNumber;
+    this.salt = salt;
   }
 
   public K getKey() {
@@ -43,9 +49,13 @@ public class ShardedKey<K> implements Serializable {
     return shardNumber;
   }
 
+  public int getSalt() {
+    return salt;
+  }
+
   @Override
   public String toString() {
-    return "key: " + key + " shard: " + shardNumber;
+    return "key: " + key + " shard: " + shardNumber + " salt: " + salt;
   }
 
   @Override
@@ -54,11 +64,13 @@ public class ShardedKey<K> implements Serializable {
       return false;
     }
     ShardedKey<K> other = (ShardedKey<K>) o;
-    return Objects.equals(key, other.key) && Objects.equals(shardNumber, other.shardNumber);
+    return Objects.equals(key, other.key)
+        && Objects.equals(shardNumber, other.shardNumber)
+        && Objects.equals(salt, other.salt);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(key, shardNumber);
+    return Objects.hash(key, shardNumber, salt);
   }
 }

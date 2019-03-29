@@ -41,6 +41,7 @@ import org.apache.beam.runners.core.construction.TransformPayloadTranslatorRegis
 import org.apache.beam.runners.core.construction.UnboundedReadFromBoundedSource.BoundedToUnboundedSourceAdapter;
 import org.apache.beam.runners.flink.translation.functions.FlinkAssignWindows;
 import org.apache.beam.runners.flink.translation.types.CoderTypeInformation;
+import org.apache.beam.runners.flink.translation.wrappers.streaming.ApplyShardingKeyDoFnOperator;
 import org.apache.beam.runners.flink.translation.wrappers.streaming.DoFnOperator;
 import org.apache.beam.runners.flink.translation.wrappers.streaming.KvToByteBufferKeySelector;
 import org.apache.beam.runners.flink.translation.wrappers.streaming.SingletonKeyedWorkItem;
@@ -56,11 +57,13 @@ import org.apache.beam.sdk.coders.KvCoder;
 import org.apache.beam.sdk.coders.VoidCoder;
 import org.apache.beam.sdk.io.BoundedSource;
 import org.apache.beam.sdk.io.UnboundedSource;
+import org.apache.beam.sdk.io.WriteFiles;
 import org.apache.beam.sdk.runners.AppliedPTransform;
 import org.apache.beam.sdk.transforms.Combine;
 import org.apache.beam.sdk.transforms.CombineFnBase.GlobalCombineFn;
 import org.apache.beam.sdk.transforms.DoFn;
 import org.apache.beam.sdk.transforms.PTransform;
+import org.apache.beam.sdk.transforms.ParDo;
 import org.apache.beam.sdk.transforms.join.RawUnionValue;
 import org.apache.beam.sdk.transforms.join.UnionCoder;
 import org.apache.beam.sdk.transforms.reflect.DoFnSignature;
@@ -77,6 +80,7 @@ import org.apache.beam.sdk.values.PCollection;
 import org.apache.beam.sdk.values.PCollectionTuple;
 import org.apache.beam.sdk.values.PCollectionView;
 import org.apache.beam.sdk.values.PValue;
+import org.apache.beam.sdk.values.ShardedKey;
 import org.apache.beam.sdk.values.TupleTag;
 import org.apache.beam.sdk.values.TupleTagList;
 import org.apache.beam.sdk.values.ValueWithRecordId;
@@ -587,12 +591,18 @@ class FlinkStreamingTransformTranslators {
         PTransform<PCollection<InputT>, PCollectionTuple> transform,
         FlinkStreamingTranslationContext context) {
 
+      boolean captureIsShardingFn = false;
       DoFn<InputT, OutputT> doFn;
       try {
         doFn = (DoFn<InputT, OutputT>) ParDoTranslation.getDoFn(context.getCurrentTransform());
+        if (doFn instanceof WriteFiles.ApplyShardingKeyFn) {
+          captureIsShardingFn = true;
+        }
       } catch (IOException e) {
         throw new RuntimeException(e);
       }
+      // make it final for closure which follows
+      final boolean isShardingFn = captureIsShardingFn;
 
       TupleTag<OutputT> mainOutputTag;
       try {
@@ -641,8 +651,27 @@ class FlinkStreamingTransformTranslators {
               outputCoders1,
               keyCoder,
               keySelector,
-              transformedSideInputs) ->
-              new DoFnOperator<>(
+              transformedSideInputs) -> {
+            if (shardingFn) {
+              return new ApplyShardingKeyDoFnOperator(
+                  (WriteFiles.ApplyShardingKeyFn)doFn1,
+                  stepName,
+                  windowedInputCoder,
+                  inputCoder,
+                  outputCoders1,
+                  mainOutputTag1,
+                  additionalOutputTags1,
+                  new DoFnOperator.MultiOutputOutputManagerFactory<>(
+                      mainOutputTag1, tagsToOutputTags, tagsToCoders, tagsToIds),
+                  windowingStrategy,
+                  transformedSideInputs,
+                  sideInputs1,
+                  context1.getPipelineOptions(),
+                  keyCoder,
+                  keySelector
+              );
+            } else {
+              return new DoFnOperator<>(
                   doFn1,
                   stepName,
                   windowedInputCoder,
@@ -657,7 +686,9 @@ class FlinkStreamingTransformTranslators {
                   sideInputs1,
                   context1.getPipelineOptions(),
                   keyCoder,
-                  keySelector));
+                  keySelector);
+            }
+          });
     }
   }
 

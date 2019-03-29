@@ -627,7 +627,7 @@ public abstract class WriteFiles<UserT, DestinationT, OutputT>
       return input
           .apply(
               "ApplyShardingKey",
-              ParDo.of(new ApplyShardingKeyFn(numShardsView, destinationCoder))
+              ParDo.of(new ApplyShardingKeyFn(numShardsView, destinationCoder, null))
                   .withSideInputs(shardingSideInputs))
           .setCoder(KvCoder.of(ShardedKeyCoder.of(VarIntCoder.of()), input.getCoder()))
           .apply("GroupIntoShards", GroupByKey.create())
@@ -638,17 +638,29 @@ public abstract class WriteFiles<UserT, DestinationT, OutputT>
     }
   }
 
-  private class ApplyShardingKeyFn extends DoFn<UserT, KV<ShardedKey<Integer>, UserT>> {
+  public interface ShardKeyFactory {
+    ShardedKey<Integer> createShardKey(Integer key, int shardCount);
+  }
+
+  public class ApplyShardingKeyFn extends DoFn<UserT, KV<ShardedKey<Integer>, UserT>> {
     private final @Nullable PCollectionView<Integer> numShardsView;
     private final Coder<DestinationT> destinationCoder;
+    private @Nullable ShardKeyFactory shardKeyFactory;
 
     private int shardNumber;
 
+    public void setShardKeyFactory(ShardKeyFactory factory) {
+      shardKeyFactory = factory;
+    }
+
     ApplyShardingKeyFn(
-        @Nullable PCollectionView<Integer> numShardsView, Coder<DestinationT> destinationCoder) {
+        @Nullable PCollectionView<Integer> numShardsView,
+        Coder<DestinationT> destinationCoder,
+        @Nullable ShardKeyFactory shardKeyFactory) {
       this.numShardsView = numShardsView;
       this.destinationCoder = destinationCoder;
       this.shardNumber = UNKNOWN_SHARDNUM;
+      this.shardKeyFactory = shardKeyFactory;
     }
 
     @ProcessElement
@@ -666,13 +678,7 @@ public abstract class WriteFiles<UserT, DestinationT, OutputT>
           "Must have a positive number of shards specified for non-runner-determined sharding."
               + " Got %s",
           shardCount);
-      if (shardNumber == UNKNOWN_SHARDNUM) {
-        // We want to desynchronize the first record sharding key for each instance of
-        // ApplyShardingKey, so records in a small PCollection will be statistically balanced.
-        shardNumber = ThreadLocalRandom.current().nextInt(shardCount);
-      } else {
-        shardNumber = (shardNumber + 1) % shardCount;
-      }
+
       // We avoid using destination itself as a sharding key, because destination is often large.
       // e.g. when using {@link DefaultFilenamePolicy}, the destination contains the entire path
       // to the file. Often most of the path is constant across all destinations, just the path
@@ -682,10 +688,25 @@ public abstract class WriteFiles<UserT, DestinationT, OutputT>
       // however the number of collisions should be small, so there's no need to worry about memory
       // issues.
       DestinationT destination = getDynamicDestinations().getDestination(context.element());
-      context.output(
-          KV.of(
-              ShardedKey.of(hashDestination(destination, destinationCoder), shardNumber),
-              context.element()));
+      Integer key = hashDestination(destination, destinationCoder);
+
+      ShardedKey<Integer> shardedKey;
+
+      if (shardKeyFactory == null) {
+
+        if (shardNumber == UNKNOWN_SHARDNUM) {
+          // We want to desynchronize the first record sharding key for each instance of
+          // ApplyShardingKey, so records in a small PCollection will be statistically balanced.
+          shardNumber = ThreadLocalRandom.current().nextInt(shardCount);
+        } else {
+          shardNumber = (shardNumber + 1) % shardCount;
+        }
+        shardedKey = ShardedKey.of(key, shardNumber);
+      } else {
+        shardedKey = shardKeyFactory.createShardKey(key, shardCount);
+      }
+
+      context.output(KV.of(shardedKey, context.element()));
     }
   }
 
