@@ -356,6 +356,9 @@ public class KafkaIO {
     @Nullable
     abstract Map<String, Object> getOffsetConsumerConfig();
 
+    @Nullable
+    abstract Duration getDefaultKafkaApiTimeout();
+
     abstract Builder<K, V> toBuilder();
 
     @Experimental
@@ -394,6 +397,8 @@ public class KafkaIO {
           TimestampPolicyFactory<K, V> timestampPolicyFactory);
 
       abstract Builder<K, V> setOffsetConsumerConfig(Map<String, Object> offsetConsumerConfig);
+
+      abstract Builder<K, V> setDefaultKafkaApiTimeout(Duration value);
 
       abstract Read<K, V> build();
 
@@ -792,6 +797,19 @@ public class KafkaIO {
      */
     public Read<K, V> withOffsetConsumerConfigOverrides(Map<String, Object> offsetConsumerConfig) {
       return toBuilder().setOffsetConsumerConfig(offsetConsumerConfig).build();
+    }
+
+    /**
+     * Sets a default timeout to use for API calls to Kafka which are possibly blocking. {@link
+     * KafkaIO.Read} will not wait indefinitely for such calls but cancels them and fail after given
+     * timeout.
+     *
+     * <p>Higher versions of kafka client library supports such API timeout, which is passed in
+     * consumer config as `default.api.timeout.ms`. If timeout is not explicitly set here, then
+     * {@link KafkaIO.Read} will look for `default.api.timeout.ms` parameter in consumer config.
+     */
+    public Read<K, V> withDefaultKafkaApiTimeout(Duration timeout) {
+      return toBuilder().setDefaultKafkaApiTimeout(timeout).build();
     }
 
     /**
