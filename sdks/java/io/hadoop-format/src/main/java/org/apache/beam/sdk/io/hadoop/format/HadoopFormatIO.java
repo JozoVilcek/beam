@@ -370,6 +370,8 @@ public class HadoopFormatIO {
 
     public abstract @Nullable Coder<V> getValueCoder();
 
+    public abstract @Nullable Boolean getSkipKeyValueClone();
+
     public abstract @Nullable TypeDescriptor<?> getinputFormatClass();
 
     public abstract @Nullable TypeDescriptor<?> getinputFormatKeyClass();
@@ -393,6 +395,8 @@ public class HadoopFormatIO {
       abstract Builder<K, V> setValueTypeDescriptor(TypeDescriptor<V> valueTypeDescriptor);
 
       abstract Builder<K, V> setValueCoder(Coder<V> valueCoder);
+
+      abstract Builder<K, V> setSkipKeyValueClone(Boolean value);
 
       abstract Builder<K, V> setInputFormatClass(TypeDescriptor<?> inputFormatClass);
 
@@ -467,6 +471,18 @@ public class HadoopFormatIO {
       return withValueTranslation(function).toBuilder().setValueCoder(coder).build();
     }
 
+    /**
+     * Determines if key-value clone should be skipped or not (default is 'false'). Hadoop formats
+     * typically work with Writable data structures which are mutable. Therefore, this IO will clone
+     * read key-values if they are not in the list of well known immutable types. However, in case
+     * user does use key/value translation functions, resulting key-values might already be
+     * immutable. In such case, additional copy is unnecessary overhead and can be avoided by
+     * setting skip to 'true'.
+     */
+    public Read<K, V> withSkipKeyValueClone(boolean value) {
+      return toBuilder().setSkipKeyValueClone(value).build();
+    }
+
     @Override
     public PCollection<KV<K, V>> expand(PBegin input) {
       validateTransform();
@@ -480,13 +496,16 @@ public class HadoopFormatIO {
       if (valueCoder == null) {
         valueCoder = getDefaultCoder(getValueTypeDescriptor(), coderRegistry);
       }
+      boolean skipKeyValueClone = getSkipKeyValueClone() == null ? false : getSkipKeyValueClone();
+
       HadoopInputFormatBoundedSource<K, V> source =
           new HadoopInputFormatBoundedSource<>(
               getConfiguration(),
               keyCoder,
               valueCoder,
               getKeyTranslationFunction(),
-              getValueTranslationFunction());
+              getValueTranslationFunction(),
+              skipKeyValueClone);
       return input.getPipeline().apply(org.apache.beam.sdk.io.Read.from(source));
     }
 
@@ -574,6 +593,7 @@ public class HadoopFormatIO {
     private final @Nullable SimpleFunction<?, K> keyTranslationFunction;
     private final @Nullable SimpleFunction<?, V> valueTranslationFunction;
     private final SerializableSplit inputSplit;
+    private final boolean skipKeyValueClone;
     private transient List<SerializableSplit> inputSplits;
     private long boundedSourceEstimatedSize = 0;
     private transient InputFormat<?, ?> inputFormatObj;
@@ -597,8 +617,16 @@ public class HadoopFormatIO {
         Coder<K> keyCoder,
         Coder<V> valueCoder,
         @Nullable SimpleFunction<?, K> keyTranslationFunction,
-        @Nullable SimpleFunction<?, V> valueTranslationFunction) {
-      this(conf, keyCoder, valueCoder, keyTranslationFunction, valueTranslationFunction, null);
+        @Nullable SimpleFunction<?, V> valueTranslationFunction,
+        boolean skipKeyValueClone) {
+      this(
+          conf,
+          keyCoder,
+          valueCoder,
+          keyTranslationFunction,
+          valueTranslationFunction,
+          null,
+          skipKeyValueClone);
     }
 
     @SuppressWarnings("WeakerAccess")
@@ -608,13 +636,15 @@ public class HadoopFormatIO {
         Coder<V> valueCoder,
         @Nullable SimpleFunction<?, K> keyTranslationFunction,
         @Nullable SimpleFunction<?, V> valueTranslationFunction,
-        SerializableSplit inputSplit) {
+        SerializableSplit inputSplit,
+        boolean skipKeyValueClone) {
       this.conf = conf;
       this.inputSplit = inputSplit;
       this.keyCoder = keyCoder;
       this.valueCoder = valueCoder;
       this.keyTranslationFunction = keyTranslationFunction;
       this.valueTranslationFunction = valueTranslationFunction;
+      this.skipKeyValueClone = skipKeyValueClone;
     }
 
     @SuppressWarnings("WeakerAccess")
@@ -670,7 +700,8 @@ public class HadoopFormatIO {
                       valueCoder,
                       keyTranslationFunction,
                       valueTranslationFunction,
-                      serializableInputSplit))
+                      serializableInputSplit,
+                      skipKeyValueClone))
           .collect(Collectors.toList());
     }
 
@@ -906,7 +937,7 @@ public class HadoopFormatIO {
       private <T> T cloneIfPossiblyMutable(T input, Coder<T> coder)
           throws CoderException, ClassCastException {
         // If the input object is not of known immutable type, clone the object.
-        if (!isKnownImmutable(input)) {
+        if (!skipKeyValueClone && !isKnownImmutable(input)) {
           input = CoderUtils.clone(coder, input);
         }
         return input;
