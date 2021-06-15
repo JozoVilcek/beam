@@ -157,10 +157,11 @@ import org.slf4j.LoggerFactory;
  *
  * <ul>
  *   <li><b>How many shards are generated per pane:</b> This is controlled by <i>sharding</i>, using
- *       {@link Write#withNumShards} or {@link Write#withSharding}. The default is runner-specific,
- *       so the number of shards will vary based on runner behavior, though at least 1 shard will
- *       always be produced for every non-empty pane. Note that setting a fixed number of shards can
- *       hurt performance: it adds an additional {@link GroupByKey} to the pipeline. However, it is
+ *       {@link Write#withNumShards}, {@link Write#withSharding} or {@link
+ *       Write#withShardingFunction(ShardingFunction)}. The default is runner-specific, so the
+ *       number of shards will vary based on runner behavior, though at least 1 shard will always be
+ *       produced for every non-empty pane. Note that setting a fixed number of shards can hurt
+ *       performance: it adds an additional {@link GroupByKey} to the pipeline. However, it is
  *       required to set it when writing an unbounded {@link PCollection} due to <a
  *       href="https://issues.apache.org/jira/browse/BEAM-1438">BEAM-1438</a> and similar behavior
  *       in other runners.
@@ -171,7 +172,8 @@ import org.slf4j.LoggerFactory;
  *   <li><b>Which elements go into which shard:</b> Elements within a pane get distributed into
  *       different shards created for that pane arbitrarily, though {@link FileIO.Write} attempts to
  *       make shards approximately evenly sized. For more control over which elements go into which
- *       files, consider using <i>dynamic destinations</i> (see below).
+ *       files, consider using {@link Write#withShardingFunction(ShardingFunction)} or <i>dynamic
+ *       destinations</i> (see below).
  *   <li><b>How a given set of elements is written to a shard:</b> This is controlled by the {@link
  *       Sink}, e.g. {@link AvroIO#sink} will generate Avro files. The {@link Sink} controls the
  *       format of a single file: how to open a file, how to write each element to it, and how to
@@ -931,6 +933,8 @@ public class FileIO {
 
     abstract @Nullable PTransform<PCollection<UserT>, PCollectionView<Integer>> getSharding();
 
+    abstract @Nullable ShardingFunction<UserT, DestinationT> getShardingFunction();
+
     abstract boolean getIgnoreWindowing();
 
     abstract boolean getNoSpilling();
@@ -978,6 +982,9 @@ public class FileIO {
           PTransform<PCollection<UserT>, PCollectionView<Integer>> sharding);
 
       abstract Builder<DestinationT, UserT> setIgnoreWindowing(boolean ignoreWindowing);
+
+      abstract Builder<DestinationT, UserT> setShardingFunction(
+          @Nullable ShardingFunction<UserT, DestinationT> shardingFunction);
 
       abstract Builder<DestinationT, UserT> setNoSpilling(boolean noSpilling);
 
@@ -1190,6 +1197,12 @@ public class FileIO {
       return toBuilder().setSharding(sharding).build();
     }
 
+    /** Specifies to use given sharding function to assign shard for inputs. */
+    public Write<DestinationT, UserT> withShardingFunction(
+        ShardingFunction<UserT, DestinationT> shardingFunction) {
+      return toBuilder().setShardingFunction(shardingFunction).build();
+    }
+
     /**
      * Specifies to ignore windowing information in the input, and instead rewindow it to global
      * window with the default trigger.
@@ -1290,6 +1303,7 @@ public class FileIO {
       resolvedSpec.setCompression(getCompression());
       resolvedSpec.setNumShards(getNumShards());
       resolvedSpec.setSharding(getSharding());
+      resolvedSpec.setShardingFunction(getShardingFunction());
       resolvedSpec.setIgnoreWindowing(getIgnoreWindowing());
       resolvedSpec.setNoSpilling(getNoSpilling());
 
@@ -1298,9 +1312,11 @@ public class FileIO {
           WriteFiles.to(new ViaFileBasedSink<>(resolved))
               .withSideInputs(Lists.newArrayList(resolved.getAllSideInputs()));
       if (getNumShards() != null) {
-        writeFiles = writeFiles.withNumShards(getNumShards());
+        writeFiles =
+            writeFiles.withNumShards(getNumShards()).withShardingFunction(getShardingFunction());
       } else if (getSharding() != null) {
-        writeFiles = writeFiles.withSharding(getSharding());
+        writeFiles =
+            writeFiles.withSharding(getSharding()).withShardingFunction(getShardingFunction());
       } else {
         writeFiles = writeFiles.withRunnerDeterminedSharding();
       }
