@@ -53,6 +53,7 @@ import static org.apache.beam.sdk.extensions.protobuf.TestProtoSchemas.REQUIRED_
 import static org.apache.beam.sdk.extensions.protobuf.TestProtoSchemas.REQUIRED_PRIMITIVE_SCHEMA;
 import static org.apache.beam.sdk.extensions.protobuf.TestProtoSchemas.WKT_MESSAGE_PROTO;
 import static org.apache.beam.sdk.extensions.protobuf.TestProtoSchemas.WKT_MESSAGE_ROW;
+import static org.apache.beam.sdk.extensions.protobuf.TestProtoSchemas.WKT_MESSAGE_ROW_WITH_NULL_VALUES;
 import static org.apache.beam.sdk.extensions.protobuf.TestProtoSchemas.WKT_MESSAGE_SCHEMA;
 import static org.apache.beam.sdk.extensions.protobuf.TestProtoSchemas.WKT_MESSAGE_SHUFFLED_ROW;
 import static org.apache.beam.sdk.extensions.protobuf.TestProtoSchemas.withFieldNumber;
@@ -329,6 +330,20 @@ public class ProtoMessageSchemaTest {
     SerializableFunction<Row, WktMessage> fromRow =
         new ProtoMessageSchema().fromRowFunction(TypeDescriptor.of(WktMessage.class));
     assertEquals(WKT_MESSAGE_PROTO, fromRow.apply(WKT_MESSAGE_ROW));
+  }
+
+  @Test
+  public void testWktRowWithNullsToProtoWithNullable() {
+
+    WKT_MESSAGE_SCHEMA.getFields().forEach(f -> assertEquals(true, f.getType().getNullable()));
+    new ProtoMessageSchema()
+        .schemaFor(TypeDescriptor.of(WktMessage.class))
+        .getFields()
+        .forEach(f -> assertEquals(true, f.getType().getNullable()));
+
+    SerializableFunction<Row, WktMessage> fromRow =
+        new ProtoMessageSchema().fromRowFunction(TypeDescriptor.of(WktMessage.class));
+    assertEquals(WktMessage.newBuilder().build(), fromRow.apply(WKT_MESSAGE_ROW_WITH_NULL_VALUES));
   }
 
   @Test

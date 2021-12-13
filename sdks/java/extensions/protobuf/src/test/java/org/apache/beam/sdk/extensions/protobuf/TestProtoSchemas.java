@@ -506,6 +506,10 @@ class TestProtoSchemas {
           .addValues(
               1.1, 2.2F, 32, 64L, 33, 65L, true, "horsey", BYTE_ARRAY, JAVA_NOW, JAVA_DURATION)
           .build();
+  static final Row WKT_MESSAGE_ROW_WITH_NULL_VALUES =
+      Row.withSchema(WKT_MESSAGE_SCHEMA)
+          .addValues(null, null, null, null, null, null, null, null, null, null, null)
+          .build();
   static final Row WKT_MESSAGE_SHUFFLED_ROW =
       Row.withSchema(WKT_MESSAGE_SHUFFLED_SCHEMA)
           .addValues(
