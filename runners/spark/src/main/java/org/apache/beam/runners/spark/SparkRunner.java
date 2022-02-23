@@ -218,7 +218,10 @@ public final class SparkRunner extends PipelineRunner<SparkPipelineResult> {
       result = new SparkPipelineResult.StreamingMode(startPipeline, jssc);
     } else {
       jsc = SparkContextFactory.getSparkContext(pipelineOptions);
-      eventLoggingListener = startEventLoggingListener(jsc, pipelineOptions, startTime);
+      // TODO: Fix properly. Do not initialize event loggin listener for Batch Spark. Spark alredy is doing that
+      //       internally and they are coliding.
+      //       More info in: https://issues.apache.org/jira/browse/BEAM-13981
+      eventLoggingListener = null;
       final EvaluationContext evaluationContext =
           new EvaluationContext(jsc, pipeline, pipelineOptions);
       translator = new TransformTranslator.Translator();
