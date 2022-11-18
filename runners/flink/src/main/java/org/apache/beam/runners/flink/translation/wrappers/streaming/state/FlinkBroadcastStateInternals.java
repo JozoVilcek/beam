@@ -568,7 +568,7 @@ public class FlinkBroadcastStateInternals<K> implements StateInternals {
         StateNamespace namespace,
         Coder<AccumT> accumCoder,
         FlinkBroadcastStateInternals<K2> flinkStateInternals,
-        PipelineOptions pipelineOptions) {
+        SerializablePipelineOptions pipelineOptions) {
       super(flinkStateBackend, address.getId(), namespace, accumCoder, pipelineOptions);
 
       this.namespace = namespace;
