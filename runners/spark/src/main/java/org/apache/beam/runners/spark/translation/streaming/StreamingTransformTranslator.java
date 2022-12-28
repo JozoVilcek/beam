@@ -461,7 +461,8 @@ public final class StreamingTransformTranslator {
                           windowingStrategy,
                           false,
                           doFnSchemaInformation,
-                          sideInputMapping));
+                          sideInputMapping,
+                          false));
                 });
 
         Map<TupleTag<?>, PCollection<?>> outputs = context.getOutputs(transform);
